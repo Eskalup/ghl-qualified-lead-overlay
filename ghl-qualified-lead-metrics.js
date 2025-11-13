@@ -17,11 +17,9 @@
     ACCOUNT_ID: 'FKNp0s6MjnKx0dJcr7Ix',
     FUNNEL_ID: 'lzZnur5Cjl3ERFlFki6A',
 
-    // Google Sheets configuration
-    // To use this, you need to publish your Google Sheet as CSV
-    // File -> Share -> Publish to web -> Select Sheet and CSV format
-    SHEET_ID: '1WPiVyEpsiUX3wqyE_XAkxj_5GfzOd3PvKq6ReEldAu4',
-    SHEET_GID: '0', // First sheet
+    // Google Sheets published CSV URL
+    // Get this from: File -> Share -> Publish to web -> CSV format
+    PUBLISHED_CSV_URL: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTi7bVNArCJ8e9ln-hROx2DPMTkvLD2GwQzN3zqv_KOducLGAXUvjc4X-a686C0SI874tKT2YVzLi-Q/pub?gid=0&single=true&output=csv',
 
     // Column indices (0-based)
     COLUMNS: {
@@ -85,10 +83,8 @@
     }
 
     try {
-      const csvUrl = `https://docs.google.com/spreadsheets/d/${CONFIG.SHEET_ID}/export?format=csv&gid=${CONFIG.SHEET_GID}`;
-
       console.log('[Qualified Lead Metrics] Fetching data from Google Sheets...');
-      const response = await fetch(csvUrl);
+      const response = await fetch(CONFIG.PUBLISHED_CSV_URL);
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -182,9 +178,17 @@
     if (!dateStr) return null;
 
     try {
-      // Try parsing the date string
-      // Common formats: "MM/DD/YYYY", "YYYY-MM-DD", "DD/MM/YYYY"
-      const date = new Date(dateStr);
+      // Handle dates with ordinal suffixes like "Nov 13th 2025, 9:00 am"
+      // Remove ordinal suffixes (st, nd, rd, th) from dates
+      let cleanedDate = dateStr.replace(/(\d+)(st|nd|rd|th)/gi, '$1');
+
+      // Try parsing the cleaned date string
+      // Supports formats:
+      // - "Nov 13 2025, 9:00 am" (after cleaning)
+      // - "MM/DD/YYYY"
+      // - "YYYY-MM-DD"
+      // - "DD/MM/YYYY"
+      const date = new Date(cleanedDate);
 
       // Check if valid date
       if (isNaN(date.getTime())) {

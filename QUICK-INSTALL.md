@@ -31,7 +31,7 @@
 
 ### "No data fetched" error
 - Make sure your Google Sheet is published as CSV (Step 1)
-- Try opening this URL in your browser: https://docs.google.com/spreadsheets/d/1WPiVyEpsiUX3wqyE_XAkxj_5GfzOd3PvKq6ReEldAu4/export?format=csv&gid=0
+- Try opening this URL in your browser: https://docs.google.com/spreadsheets/d/e/2PACX-1vTi7bVNArCJ8e9ln-hROx2DPMTkvLD2GwQzN3zqv_KOducLGAXUvjc4X-a686C0SI874tKT2YVzLi-Q/pub?gid=0&single=true&output=csv
 - You should see CSV data. If you get an error, republish the sheet.
 
 ### "Script not loaded" message
@@ -41,7 +41,7 @@
 ### Wrong numbers showing
 - Check that your Google Sheet has:
   - Column H = Path ("A" or "B")
-  - Column J = Date (MM/DD/YYYY format)
+  - Column J = Date (supports "Nov 13th 2025, 9:00 am" or "MM/DD/YYYY")
   - Column K = Qualified status ("Si" for qualified)
 - Select a date range that includes data in your sheet
 

@@ -28,11 +28,13 @@ Your Google Sheet needs to be published as CSV for the script to access it:
    - **Sheet**: Select the specific sheet (or "Sheet1" if it's the first sheet)
    - **Format**: Select "Comma-separated values (.csv)"
 4. Click **Publish**
-5. Copy the published URL (you won't need it, the script uses the Sheet ID)
+5. Copy the published URL - it should look like: `https://docs.google.com/spreadsheets/d/e/2PACX-...../pub?gid=0&single=true&output=csv`
+
+**Note:** The script is already configured with your published URL. If you republish or use a different sheet, update the `PUBLISHED_CSV_URL` in the script.
 
 **Important**: Make sure your Google Sheet has the following columns:
 - **Column H (index 7)**: Path (values should be "A" or "B")
-- **Column J (index 9)**: Opt-in date (format: MM/DD/YYYY or YYYY-MM-DD)
+- **Column J (index 9)**: Opt-in date (supports: "Nov 13th 2025, 9:00 am", "MM/DD/YYYY", "YYYY-MM-DD")
 - **Column K (index 10)**: Qualified status (value should be "Si" for qualified leads)
 
 ### 2. Install the Script in GoHighLevel

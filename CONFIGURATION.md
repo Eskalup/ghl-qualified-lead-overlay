@@ -42,22 +42,26 @@ FUNNEL_ID: 'XYZ789'
 
 ### 2. Google Sheets Settings
 
-Located at lines 23-24:
+Located around line 22:
 
 ```javascript
-SHEET_ID: '1WPiVyEpsiUX3wqyE_XAkxj_5GfzOd3PvKq6ReEldAu4',
-SHEET_GID: '0',
+PUBLISHED_CSV_URL: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTi7bVNArCJ8e9ln-hROx2DPMTkvLD2GwQzN3zqv_KOducLGAXUvjc4X-a686C0SI874tKT2YVzLi-Q/pub?gid=0&single=true&output=csv',
 ```
 
-**SHEET_ID**: Found in your Google Sheet URL
-```
-URL: https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit#gid={SHEET_GID}
-```
+**PUBLISHED_CSV_URL**: The full published CSV URL from Google Sheets
 
-**SHEET_GID**: The sheet tab identifier
-- `0` = First sheet (default)
-- `1` = Second sheet
-- Check the `#gid=` value in the URL when viewing a specific sheet
+**How to get this URL:**
+1. Open your Google Sheet
+2. Go to **File** → **Share** → **Publish to web**
+3. In the first dropdown, select your sheet
+4. In the second dropdown, select **Comma-separated values (.csv)**
+5. Click **Publish**
+6. Copy the URL that appears (it will look like the example above)
+7. Paste it into the `PUBLISHED_CSV_URL` field
+
+**Note about GID:**
+- The `gid=0` in the URL refers to the first sheet
+- If you want a different sheet tab, change the GID in the published URL
 
 ### 3. Column Mapping
 
@@ -123,10 +127,12 @@ Your Google Sheet must have these three columns (can be in any position):
 
 2. **Date Column** (J by default)
    - Supported formats:
+     - `Nov 13th 2025, 9:00 am` (with ordinal suffixes like st, nd, rd, th)
      - `MM/DD/YYYY` (e.g., 01/15/2025)
      - `YYYY-MM-DD` (e.g., 2025-01-15)
      - `DD/MM/YYYY` (e.g., 15/01/2025)
    - Must be a valid date
+   - The script automatically removes ordinal suffixes (st, nd, rd, th) before parsing
 
 3. **Qualified Column** (K by default)
    - Default value for qualified: "Si"
@@ -247,9 +253,9 @@ Should run? true
 
 ### Step 2: Test Google Sheet Access
 
-Open this URL in your browser:
+Open this URL in your browser (use your actual published URL):
 ```
-https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/export?format=csv&gid=YOUR_GID
+https://docs.google.com/spreadsheets/d/e/2PACX-1vTi7bVNArCJ8e9ln-hROx2DPMTkvLD2GwQzN3zqv_KOducLGAXUvjc4X-a686C0SI874tKT2YVzLi-Q/pub?gid=0&single=true&output=csv
 ```
 
 You should see CSV data. If you get an error, the sheet isn't published correctly.
@@ -306,7 +312,7 @@ function shouldRunScript() {
 **Solution:**
 Test the CSV URL directly in browser:
 ```
-https://docs.google.com/spreadsheets/d/1WPiVyEpsiUX3wqyE_XAkxj_5GfzOd3PvKq6ReEldAu4/export?format=csv&gid=0
+https://docs.google.com/spreadsheets/d/e/2PACX-1vTi7bVNArCJ8e9ln-hROx2DPMTkvLD2GwQzN3zqv_KOducLGAXUvjc4X-a686C0SI874tKT2YVzLi-Q/pub?gid=0&single=true&output=csv
 ```
 
 ### Issue: Wrong data displayed
