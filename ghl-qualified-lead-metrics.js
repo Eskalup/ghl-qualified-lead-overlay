@@ -451,6 +451,7 @@
   let dateListenersAttached = false;
   let isUpdating = false;
   let tableObserver = null;
+  let pollingInterval = null;
 
   /**
    * Main function to fetch data and update metrics
@@ -510,7 +511,7 @@
       const metrics = calculateQualifiedMetrics(data, dateRange);
 
       // Update DOM
-      updateOptinMetrics(metrics);
+      await updateOptinMetrics(metrics);
 
       // Mark as succeeded
       hasSucceeded = true;
@@ -521,9 +522,53 @@
         attachDateChangeListeners();
         attachTableObserver();
       }
+
+      // After initial update, start polling to catch any late GHL refreshes
+      startPolling(dateRange);
     } finally {
       isUpdating = false;
     }
+  }
+
+  /**
+   * Poll and re-apply metrics for several seconds after an update
+   * This ensures metrics persist even if GHL does multiple refreshes
+   */
+  function startPolling(dateRange) {
+    // Clear any existing polling
+    if (pollingInterval) {
+      clearInterval(pollingInterval);
+    }
+
+    console.log('[Qualified Lead Metrics] Starting polling to ensure metrics persist...');
+
+    let pollCount = 0;
+    const MAX_POLLS = 8; // Poll for 8 seconds (8 polls × 1 second)
+
+    pollingInterval = setInterval(async () => {
+      pollCount++;
+
+      // Check if table is stable (not loading)
+      const loadingSpinner = document.querySelector('#funnel-stats-details .n-spin');
+      const loadingBar = document.querySelector('#funnel-stats-details .n-progress');
+
+      if (!loadingSpinner && !loadingBar && !isUpdating) {
+        // Table is stable, re-apply metrics
+        const data = cachedData.data;
+        if (data) {
+          const metrics = calculateQualifiedMetrics(data, dateRange);
+          console.log('[Qualified Lead Metrics] Polling: re-applying metrics...');
+          await updateOptinMetrics(metrics);
+        }
+      }
+
+      // Stop polling after MAX_POLLS attempts
+      if (pollCount >= MAX_POLLS) {
+        clearInterval(pollingInterval);
+        pollingInterval = null;
+        console.log('[Qualified Lead Metrics] Polling complete');
+      }
+    }, 1000); // Poll every 1 second
   }
 
   /**
@@ -553,7 +598,7 @@
    */
   function attachTableObserver() {
     // Watch for changes to the details table so we can re-apply our updates
-    // if GoHighLevel refreshes it
+    // if GoHighLevel refreshes it (only when not polling)
     const detailsSection = document.querySelector('#funnel-stats-details');
     if (!detailsSection) {
       console.warn('[Qualified Lead Metrics] Could not find details section for observation');
@@ -561,12 +606,16 @@
     }
 
     let lastTableUpdate = 0;
-    const MIN_UPDATE_INTERVAL = 1000; // Don't update more than once per second
+    const MIN_UPDATE_INTERVAL = 2000; // Don't update more than once per 2 seconds
 
     tableObserver = new MutationObserver((mutations) => {
+      // Don't trigger during active polling (polling handles it)
+      if (pollingInterval) {
+        return;
+      }
+
       // Check if the table content was actually modified
       const hasRelevantChanges = mutations.some(mutation => {
-        // Only trigger on childList changes or specific attribute changes
         return mutation.type === 'childList' ||
                (mutation.type === 'attributes' && mutation.attributeName === 'class');
       });
@@ -580,21 +629,8 @@
         }
         lastTableUpdate = now;
 
-        // Check if GHL is currently loading - if so, don't trigger yet
-        const loadingSpinner = document.querySelector('#funnel-stats-details .n-spin');
-        const loadingBar = document.querySelector('#funnel-stats-details .n-progress');
-
-        if (loadingSpinner || loadingBar) {
-          console.log('[Qualified Lead Metrics] GHL is loading, will wait...');
-          // Schedule an update with longer delay to wait for GHL to finish
-          setTimeout(() => {
-            console.log('[Qualified Lead Metrics] GHL finished loading, re-applying metrics...');
-            scheduleUpdate();
-          }, 1500); // Wait 1.5 seconds for GHL to finish
-        } else {
-          console.log('[Qualified Lead Metrics] Table updated by GHL, re-applying metrics...');
-          scheduleUpdate();
-        }
+        console.log('[Qualified Lead Metrics] Table changed, scheduling update...');
+        scheduleUpdate();
       }
     });
 
