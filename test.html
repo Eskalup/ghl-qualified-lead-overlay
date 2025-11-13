@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GoHighLevel Metrics Test Page</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .info-box {
+            background-color: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .warning-box {
+            background-color: #fff3e0;
+            border-left: 4px solid #ff9800;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .date-picker {
+            margin-bottom: 30px;
+        }
+        .n-input--pair {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .n-input--pair input {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .n-data-table {
+            width: 100%;
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #e0e0e0;
+            padding: 12px;
+            text-align: center;
+        }
+        th {
+            background-color: #fafafc;
+            font-weight: 500;
+            color: #101828;
+        }
+        td {
+            background-color: #fff;
+            color: #344054;
+        }
+        .flex {
+            display: flex;
+        }
+        .text-center {
+            text-align: center;
+        }
+        .w-1\/2 {
+            width: 50%;
+        }
+        .py-2 {
+            padding-top: 0.5rem;
+            padding-bottom: 0.5rem;
+        }
+        .px-1 {
+            padding-left: 0.25rem;
+            padding-right: 0.25rem;
+        }
+        .border-r {
+            border-right: 1px solid #ddd;
+        }
+        .console-output {
+            background-color: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 20px;
+        }
+        .console-line {
+            margin-bottom: 4px;
+        }
+        button {
+            background-color: #18a058;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+        }
+        button:hover {
+            background-color: #159f4e;
+        }
+        button.secondary {
+            background-color: #6c757d;
+        }
+        button.secondary:hover {
+            background-color: #5a6268;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>GoHighLevel Qualified Lead Metrics - Test Page</h1>
+
+        <div class="info-box">
+            <strong>Test Instructions:</strong>
+            <ol>
+                <li>This page simulates the GoHighLevel funnel stats page structure</li>
+                <li>The URL has been set to match the target page (check console)</li>
+                <li>Select a date range and click "Update Metrics" to fetch data</li>
+                <li>Watch the console output below for logs and errors</li>
+                <li>The opt-in metrics should update with qualified lead data from your Google Sheet</li>
+            </ol>
+        </div>
+
+        <div class="warning-box">
+            <strong>Note:</strong> This is a test page. In production, the script runs automatically in GoHighLevel's custom code section.
+            The script will only run on the specific account and funnel page URL.
+        </div>
+
+        <h2>Date Range Selector</h2>
+        <div class="date-picker">
+            <div class="n-input n-input--pair">
+                <input type="text" placeholder="Start Date" value="01/01/2025" id="startDate">
+                <span>→</span>
+                <input type="text" placeholder="End Date" value="12/31/2025" id="endDate">
+            </div>
+            <div style="margin-top: 10px;">
+                <button onclick="updateMetricsManual()">Update Metrics</button>
+                <button class="secondary" onclick="clearConsole()">Clear Console</button>
+            </div>
+        </div>
+
+        <h2>Funnel Statistics</h2>
+        <div class="n-data-table">
+            <table>
+                <thead class="n-data-table-thead">
+                    <tr>
+                        <th>Name</th>
+                        <th>
+                            <div>Page Views</div>
+                            <div class="flex text-center" style="border-top: 1px solid #60a5fa; margin-top: 8px; padding-top: 8px;">
+                                <div class="w-1/2 border-r">All</div>
+                                <div class="w-1/2">Uniques</div>
+                            </div>
+                        </th>
+                        <th>
+                            <div>Opt-Ins</div>
+                            <div class="flex text-center" style="border-top: 1px solid #93c5fd; margin-top: 8px; padding-top: 8px;">
+                                <div class="w-1/2 border-r">All</div>
+                                <div class="w-1/2">Rate</div>
+                            </div>
+                        </th>
+                        <th>
+                            <div>Sales</div>
+                            <div class="flex text-center" style="border-top: 1px solid #4ade80; margin-top: 8px; padding-top: 8px;">
+                                <div class="w-1/2 border-r">Orders</div>
+                                <div class="w-1/2">Amount</div>
+                            </div>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody class="n-data-table-tbody">
+                    <tr class="n-data-table-tr">
+                        <td data-col-key="name">
+                            <span>Optin (Path A)</span>
+                        </td>
+                        <td data-col-key="pageViewsAll">
+                            <div class="flex text-center">
+                                <div class="py-2 px-1 w-1/2">1472</div>
+                                <div class="py-2 px-1 w-1/2">1340</div>
+                            </div>
+                        </td>
+                        <td data-col-key="optinsAll">
+                            <div class="flex text-center">
+                                <div class="py-2 px-1 w-1/2">464</div>
+                                <div class="py-2 px-1 w-1/2">34.63%</div>
+                            </div>
+                        </td>
+                        <td data-col-key="saleCount">
+                            <div class="flex text-center">
+                                <div class="py-2 px-1 w-1/2">0</div>
+                                <div class="py-2 px-1 w-1/2">-</div>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr class="n-data-table-tr">
+                        <td data-col-key="name">
+                            <span>Optin (Path B)</span>
+                        </td>
+                        <td data-col-key="pageViewsAll">
+                            <div class="flex text-center">
+                                <div class="py-2 px-1 w-1/2">1300</div>
+                                <div class="py-2 px-1 w-1/2">1200</div>
+                            </div>
+                        </td>
+                        <td data-col-key="optinsAll">
+                            <div class="flex text-center">
+                                <div class="py-2 px-1 w-1/2">447</div>
+                                <div class="py-2 px-1 w-1/2">37.25%</div>
+                            </div>
+                        </td>
+                        <td data-col-key="saleCount">
+                            <div class="flex text-center">
+                                <div class="py-2 px-1 w-1/2">0</div>
+                                <div class="py-2 px-1 w-1/2">-</div>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h2>Console Output</h2>
+        <div class="console-output" id="consoleOutput">
+            <div class="console-line">[Test Page] Loaded - Open browser console (F12) for full output</div>
+        </div>
+    </div>
+
+    <script>
+        // Simulate the URL being on the target page
+        // In production, this check happens automatically
+        console.log('[Test Page] Current URL:', window.location.href);
+        console.log('[Test Page] Simulating GoHighLevel page...');
+
+        // Override history to simulate the correct URL
+        const targetUrl = 'https://app.funnelup.io/v2/location/FKNp0s6MjnKx0dJcr7Ix/funnels-websites/funnels/lzZnur5Cjl3ERFlFki6A/stats';
+        history.pushState({}, '', targetUrl);
+        console.log('[Test Page] URL set to:', window.location.href);
+
+        // Capture console.log for display
+        const consoleOutput = document.getElementById('consoleOutput');
+        const originalLog = console.log;
+        const originalError = console.error;
+        const originalWarn = console.warn;
+
+        function addToConsole(message, type = 'log') {
+            const line = document.createElement('div');
+            line.className = 'console-line';
+            line.style.color = type === 'error' ? '#f48771' : type === 'warn' ? '#dcdcaa' : '#d4d4d4';
+            line.textContent = message;
+            consoleOutput.appendChild(line);
+            consoleOutput.scrollTop = consoleOutput.scrollHeight;
+        }
+
+        console.log = function(...args) {
+            originalLog.apply(console, args);
+            addToConsole(args.join(' '), 'log');
+        };
+
+        console.error = function(...args) {
+            originalError.apply(console, args);
+            addToConsole('ERROR: ' + args.join(' '), 'error');
+        };
+
+        console.warn = function(...args) {
+            originalWarn.apply(console, args);
+            addToConsole('WARNING: ' + args.join(' '), 'warn');
+        };
+
+        function clearConsole() {
+            consoleOutput.innerHTML = '<div class="console-line">[Test Page] Console cleared</div>';
+        }
+
+        function updateMetricsManual() {
+            console.log('[Test Page] Manual update triggered');
+            if (window.updateMetrics) {
+                window.updateMetrics();
+            } else {
+                console.warn('[Test Page] updateMetrics function not found. Make sure the script is loaded.');
+            }
+        }
+    </script>
+
+    <!-- Load the actual script -->
+    <script src="ghl-qualified-lead-metrics.js"></script>
+</body>
+</html>
