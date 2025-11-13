@@ -1,0 +1,417 @@
+<!--
+  FIXED VERSION - GoHighLevel Qualified Lead Metrics Overlay
+
+  FIXES:
+  1. Increased wait time for page load (3 seconds instead of 1)
+  2. Added retry mechanism - will try up to 10 times to find date picker
+  3. Will keep trying every 2 seconds if date picker not found
+  4. More robust date picker detection
+
+  INSTALLATION:
+  1. Replace your current script with this one in GoHighLevel Custom Code
+  2. Save and refresh the page
+  3. Open Developer Console (F12)
+  4. Wait a few seconds - it will retry until it finds the date picker
+-->
+
+<script>
+(function() {
+  'use strict';
+
+  // ============================================================================
+  // CONFIGURATION
+  // ============================================================================
+
+  const CONFIG = {
+    ACCOUNT_ID: 'FKNp0s6MjnKx0dJcr7Ix',
+    FUNNEL_ID: 'lzZnur5Cjl3ERFlFki6A',
+    PUBLISHED_CSV_URL: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTi7bVNArCJ8e9ln-hROx2DPMTkvLD2GwQzN3zqv_KOducLGAXUvjc4X-a686C0SI874tKT2YVzLi-Q/pub?gid=0&single=true&output=csv',
+    COLUMNS: {
+      PATH: 7,
+      DATE: 9,
+      QUALIFIED: 10
+    },
+    UPDATE_DEBOUNCE_MS: 500,
+    CACHE_DURATION_MS: 60000,
+    INITIAL_DELAY_MS: 3000,      // Wait 3 seconds for page to load
+    RETRY_DELAY_MS: 2000,         // Retry every 2 seconds
+    MAX_RETRIES: 10               // Try up to 10 times
+  };
+
+  // ============================================================================
+  // URL CHECK
+  // ============================================================================
+
+  function shouldRunScript() {
+    const url = window.location.href;
+    return url.includes(CONFIG.ACCOUNT_ID) && url.includes(`funnels/${CONFIG.FUNNEL_ID}/stats`);
+  }
+
+  if (!shouldRunScript()) {
+    return;
+  }
+
+  console.log('[Qualified Lead Metrics] Script loaded on target page');
+
+  // ============================================================================
+  // DATA FETCHING
+  // ============================================================================
+
+  let cachedData = null;
+  let cacheTimestamp = 0;
+
+  async function fetchGoogleSheetData() {
+    const now = Date.now();
+    if (cachedData && (now - cacheTimestamp) < CONFIG.CACHE_DURATION_MS) {
+      console.log('[Qualified Lead Metrics] Using cached data');
+      return cachedData;
+    }
+
+    try {
+      console.log('[Qualified Lead Metrics] Fetching data from Google Sheets...');
+      const response = await fetch(CONFIG.PUBLISHED_CSV_URL);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const csvText = await response.text();
+      const data = parseCSV(csvText);
+
+      cachedData = data;
+      cacheTimestamp = now;
+
+      console.log(`[Qualified Lead Metrics] Fetched ${data.length} rows`);
+      return data;
+
+    } catch (error) {
+      console.error('[Qualified Lead Metrics] Error fetching data:', error);
+      return null;
+    }
+  }
+
+  function parseCSV(csvText) {
+    const lines = csvText.split('\n');
+    const data = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+
+      const values = line.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g) || [];
+      const cleanValues = values.map(v => v.replace(/^"|"$/g, '').trim());
+      data.push(cleanValues);
+    }
+
+    return data;
+  }
+
+  // ============================================================================
+  // DATE PARSING - IMPROVED
+  // ============================================================================
+
+  function getDateRangeFromUI() {
+    try {
+      // Try multiple selectors for date inputs
+      let dateInputs = document.querySelectorAll('.n-input--pair input[type="text"]');
+
+      // If not found, try alternative selectors
+      if (dateInputs.length < 2) {
+        dateInputs = document.querySelectorAll('input[placeholder*="Date"]');
+      }
+
+      // Try looking for any date-related inputs
+      if (dateInputs.length < 2) {
+        const allInputs = document.querySelectorAll('input[type="text"]');
+        const dateRelatedInputs = Array.from(allInputs).filter(input => {
+          const placeholder = input.placeholder?.toLowerCase() || '';
+          const ariaLabel = input.getAttribute('aria-label')?.toLowerCase() || '';
+          return placeholder.includes('date') || ariaLabel.includes('date') ||
+                 placeholder.includes('start') || placeholder.includes('end');
+        });
+
+        if (dateRelatedInputs.length >= 2) {
+          dateInputs = dateRelatedInputs;
+        }
+      }
+
+      if (dateInputs.length < 2) {
+        console.warn('[Qualified Lead Metrics] Date inputs not found yet, will retry...');
+        return null;
+      }
+
+      const startDateStr = dateInputs[0].value;
+      const endDateStr = dateInputs[1].value;
+
+      if (!startDateStr || !endDateStr) {
+        console.warn('[Qualified Lead Metrics] Date values not set yet');
+        return null;
+      }
+
+      const startDate = new Date(startDateStr);
+      const endDate = new Date(endDateStr);
+
+      startDate.setHours(0, 0, 0, 0);
+      endDate.setHours(23, 59, 59, 999);
+
+      console.log('[Qualified Lead Metrics] Date range:', startDateStr, 'to', endDateStr);
+
+      return { startDate, endDate };
+
+    } catch (error) {
+      console.error('[Qualified Lead Metrics] Error parsing dates:', error);
+      return null;
+    }
+  }
+
+  function parseSheetDate(dateStr) {
+    if (!dateStr) return null;
+
+    try {
+      let cleanedDate = dateStr.replace(/(\d+)(st|nd|rd|th)/gi, '$1');
+      const date = new Date(cleanedDate);
+
+      if (isNaN(date.getTime())) {
+        return null;
+      }
+
+      return date;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  // ============================================================================
+  // DATA PROCESSING
+  // ============================================================================
+
+  function calculateQualifiedMetrics(data, dateRange) {
+    if (!data || !dateRange) {
+      return null;
+    }
+
+    const { startDate, endDate } = dateRange;
+    const metrics = {
+      pathA: { count: 0, total: 0 },
+      pathB: { count: 0, total: 0 }
+    };
+
+    data.forEach(row => {
+      const path = row[CONFIG.COLUMNS.PATH]?.trim().toUpperCase();
+      const dateStr = row[CONFIG.COLUMNS.DATE]?.trim();
+      const qualified = row[CONFIG.COLUMNS.QUALIFIED]?.trim().toLowerCase();
+
+      const rowDate = parseSheetDate(dateStr);
+      if (!rowDate) return;
+
+      if (rowDate < startDate || rowDate > endDate) {
+        return;
+      }
+
+      if (path === 'A') {
+        metrics.pathA.total++;
+        if (qualified === 'si') {
+          metrics.pathA.count++;
+        }
+      } else if (path === 'B') {
+        metrics.pathB.total++;
+        if (qualified === 'si') {
+          metrics.pathB.count++;
+        }
+      }
+    });
+
+    metrics.pathA.rate = metrics.pathA.total > 0
+      ? (metrics.pathA.count / metrics.pathA.total * 100).toFixed(2)
+      : '0.00';
+
+    metrics.pathB.rate = metrics.pathB.total > 0
+      ? (metrics.pathB.count / metrics.pathB.total * 100).toFixed(2)
+      : '0.00';
+
+    console.log('[Qualified Lead Metrics] Calculated metrics:', metrics);
+
+    return metrics;
+  }
+
+  // ============================================================================
+  // DOM MANIPULATION
+  // ============================================================================
+
+  function updateOptinMetrics(metrics) {
+    if (!metrics) {
+      console.warn('[Qualified Lead Metrics] No metrics to update');
+      return;
+    }
+
+    try {
+      const tbody = document.querySelector('.n-data-table-tbody');
+      if (!tbody) {
+        console.warn('[Qualified Lead Metrics] Table body not found yet');
+        return;
+      }
+
+      const rows = tbody.querySelectorAll('tr.n-data-table-tr');
+
+      if (rows.length < 2) {
+        console.warn('[Qualified Lead Metrics] Not enough table rows yet');
+        return;
+      }
+
+      updateRow(rows[0], metrics.pathA);
+      updateRow(rows[1], metrics.pathB);
+
+      console.log('[Qualified Lead Metrics] ✅ Metrics updated successfully!');
+
+    } catch (error) {
+      console.error('[Qualified Lead Metrics] Error updating metrics:', error);
+    }
+  }
+
+  function updateRow(row, pathMetrics) {
+    try {
+      const optinCell = row.querySelector('td[data-col-key="optinsAll"]');
+
+      if (!optinCell) {
+        console.warn('[Qualified Lead Metrics] Optin cell not found in row');
+        return;
+      }
+
+      const optinDivs = optinCell.querySelectorAll('.flex.text-center > div');
+
+      if (optinDivs.length >= 2) {
+        optinDivs[0].textContent = pathMetrics.count.toString();
+        optinDivs[1].textContent = `${pathMetrics.rate}%`;
+
+        optinCell.style.backgroundColor = '#f0fdf4';
+        optinCell.title = 'Qualified leads only';
+      }
+
+    } catch (error) {
+      console.error('[Qualified Lead Metrics] Error updating row:', error);
+    }
+  }
+
+  // ============================================================================
+  // MAIN EXECUTION WITH RETRY LOGIC
+  // ============================================================================
+
+  let updateTimeout = null;
+  let retryCount = 0;
+  let hasSucceeded = false;
+
+  async function updateMetrics() {
+    console.log('[Qualified Lead Metrics] Attempting to update metrics...');
+
+    // Get date range from UI
+    const dateRange = getDateRangeFromUI();
+    if (!dateRange) {
+      // If we haven't succeeded yet and haven't exceeded retries, try again
+      if (!hasSucceeded && retryCount < CONFIG.MAX_RETRIES) {
+        retryCount++;
+        console.log(`[Qualified Lead Metrics] Retry ${retryCount}/${CONFIG.MAX_RETRIES} in ${CONFIG.RETRY_DELAY_MS/1000} seconds...`);
+        setTimeout(updateMetrics, CONFIG.RETRY_DELAY_MS);
+        return;
+      }
+
+      if (!hasSucceeded) {
+        console.error('[Qualified Lead Metrics] ❌ Failed to find date picker after', CONFIG.MAX_RETRIES, 'attempts');
+        console.error('[Qualified Lead Metrics] The page might use a different structure than expected.');
+      }
+      return;
+    }
+
+    // Fetch Google Sheet data
+    const data = await fetchGoogleSheetData();
+    if (!data) {
+      console.error('[Qualified Lead Metrics] Could not fetch data from Google Sheets');
+      return;
+    }
+
+    // Calculate metrics
+    const metrics = calculateQualifiedMetrics(data, dateRange);
+
+    // Update DOM
+    updateOptinMetrics(metrics);
+
+    // Mark as succeeded
+    hasSucceeded = true;
+    retryCount = 0;
+  }
+
+  function scheduleUpdate() {
+    if (updateTimeout) {
+      clearTimeout(updateTimeout);
+    }
+
+    updateTimeout = setTimeout(() => {
+      updateMetrics();
+    }, CONFIG.UPDATE_DEBOUNCE_MS);
+  }
+
+  function init() {
+    console.log('[Qualified Lead Metrics] Initializing...');
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+      return;
+    }
+
+    // Initial update with longer delay
+    console.log(`[Qualified Lead Metrics] Waiting ${CONFIG.INITIAL_DELAY_MS/1000} seconds for page to load...`);
+    setTimeout(() => {
+      updateMetrics();
+    }, CONFIG.INITIAL_DELAY_MS);
+
+    // Watch for changes to the table or date picker
+    const observer = new MutationObserver((mutations) => {
+      // Only schedule updates if we've already succeeded once
+      if (hasSucceeded) {
+        const shouldUpdate = mutations.some(mutation => {
+          const target = mutation.target;
+          return target.classList?.contains('n-data-table-tbody') ||
+                 target.classList?.contains('n-input--pair') ||
+                 target.closest?.('.n-data-table-tbody') ||
+                 target.closest?.('.n-input--pair');
+        });
+
+        if (shouldUpdate) {
+          scheduleUpdate();
+        }
+      }
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['class', 'value']
+    });
+
+    // Listen for URL changes
+    let lastUrl = window.location.href;
+    const urlObserver = new MutationObserver(() => {
+      const currentUrl = window.location.href;
+      if (currentUrl !== lastUrl) {
+        lastUrl = currentUrl;
+
+        if (!shouldRunScript()) {
+          observer.disconnect();
+          console.log('[Qualified Lead Metrics] Navigated away from target page, stopping');
+        }
+      }
+    });
+
+    urlObserver.observe(document.querySelector('title') || document.body, {
+      subtree: true,
+      characterData: true,
+      childList: true
+    });
+
+    console.log('[Qualified Lead Metrics] Initialized successfully');
+  }
+
+  init();
+
+})();
+</script>
