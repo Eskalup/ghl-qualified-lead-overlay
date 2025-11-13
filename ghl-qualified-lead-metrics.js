@@ -110,22 +110,45 @@
   }
 
   /**
-   * Simple CSV parser
+   * Improved CSV parser that properly handles quoted fields with commas
    */
   function parseCSV(csvText) {
     const lines = csvText.split('\n');
     const data = [];
 
-    // Skip header row (index 0)
     for (let i = 1; i < lines.length; i++) {
       const line = lines[i].trim();
       if (!line) continue;
 
-      // Split by comma, handling quoted values
-      const values = line.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g) || [];
-      const cleanValues = values.map(v => v.replace(/^"|"$/g, '').trim());
+      const row = [];
+      let currentField = '';
+      let insideQuotes = false;
 
-      data.push(cleanValues);
+      for (let j = 0; j < line.length; j++) {
+        const char = line[j];
+        const nextChar = line[j + 1];
+
+        if (char === '"') {
+          // Handle escaped quotes ("")
+          if (insideQuotes && nextChar === '"') {
+            currentField += '"';
+            j++; // Skip next quote
+          } else {
+            // Toggle quote state
+            insideQuotes = !insideQuotes;
+          }
+        } else if (char === ',' && !insideQuotes) {
+          // End of field
+          row.push(currentField.trim());
+          currentField = '';
+        } else {
+          currentField += char;
+        }
+      }
+
+      // Add last field
+      row.push(currentField.trim());
+      data.push(row);
     }
 
     return data;
@@ -229,8 +252,8 @@
 
     const { startDate, endDate } = dateRange;
     const metrics = {
-      pathA: { count: 0, total: 0 },
-      pathB: { count: 0, total: 0 }
+      pathA: { count: 0 },
+      pathB: { count: 0 }
     };
 
     data.forEach(row => {
@@ -248,30 +271,17 @@
         return;
       }
 
-      // Count total optins for this path
-      if (path === 'A') {
-        metrics.pathA.total++;
-        if (qualified === 'si') {
+      // Only count qualified leads ("Si")
+      if (qualified === 'si') {
+        if (path === 'A') {
           metrics.pathA.count++;
-        }
-      } else if (path === 'B') {
-        metrics.pathB.total++;
-        if (qualified === 'si') {
+        } else if (path === 'B') {
           metrics.pathB.count++;
         }
       }
     });
 
-    // Calculate percentages
-    metrics.pathA.rate = metrics.pathA.total > 0
-      ? (metrics.pathA.count / metrics.pathA.total * 100).toFixed(2)
-      : '0.00';
-
-    metrics.pathB.rate = metrics.pathB.total > 0
-      ? (metrics.pathB.count / metrics.pathB.total * 100).toFixed(2)
-      : '0.00';
-
-    console.log('[Qualified Lead Metrics] Calculated metrics:', metrics);
+    console.log('[Qualified Lead Metrics] Calculated qualified leads:', metrics);
 
     return metrics;
   }
@@ -290,27 +300,34 @@
     }
 
     try {
-      // Find all table rows with "Optin" in the name column
-      const tbody = document.querySelector('.n-data-table-tbody');
+      // Find the detail table inside the expanded row
+      const detailsSection = document.querySelector('#funnel-stats-details');
+      if (!detailsSection) {
+        console.warn('[Qualified Lead Metrics] Details section not found');
+        return;
+      }
+
+      const tbody = detailsSection.querySelector('.n-data-table-tbody');
       if (!tbody) {
-        console.warn('[Qualified Lead Metrics] Table body not found');
+        console.warn('[Qualified Lead Metrics] Details table body not found');
         return;
       }
 
       const rows = tbody.querySelectorAll('tr.n-data-table-tr');
+      console.log('[Qualified Lead Metrics] Found', rows.length, 'detail rows');
 
       if (rows.length < 2) {
-        console.warn('[Qualified Lead Metrics] Expected at least 2 optin rows');
+        console.warn('[Qualified Lead Metrics] Not enough rows in details table');
         return;
       }
 
       // Update Path A (first row)
-      updateRow(rows[0], metrics.pathA);
+      updateRow(rows[0], metrics.pathA, 'A');
 
       // Update Path B (second row)
-      updateRow(rows[1], metrics.pathB);
+      updateRow(rows[1], metrics.pathB, 'B');
 
-      console.log('[Qualified Lead Metrics] Metrics updated successfully');
+      console.log('[Qualified Lead Metrics] ✅ Metrics updated successfully!');
 
     } catch (error) {
       console.error('[Qualified Lead Metrics] Error updating metrics:', error);
@@ -320,17 +337,33 @@
   /**
    * Update a single row with new metrics
    */
-  function updateRow(row, pathMetrics) {
+  function updateRow(row, pathMetrics, pathName) {
     try {
-      // Find the optins column (data-col-key="optinsAll")
       const optinCell = row.querySelector('td[data-col-key="optinsAll"]');
 
       if (!optinCell) {
-        console.warn('[Qualified Lead Metrics] Optin cell not found in row');
+        console.warn(`[Qualified Lead Metrics] Optin cell not found for path ${pathName}`);
         return;
       }
 
-      // Find the two divs inside: count and rate
+      // Get unique page views from the same row
+      const pageViewsCell = row.querySelector('td[data-col-key="pageViewsAll"]');
+      let uniquePageViews = 0;
+
+      if (pageViewsCell) {
+        const pageViewDivs = pageViewsCell.querySelectorAll('.flex.text-center > div');
+        if (pageViewDivs.length >= 2) {
+          // Second div contains unique page views
+          uniquePageViews = parseInt(pageViewDivs[1].textContent) || 0;
+        }
+      }
+
+      // Calculate rate: qualified leads / unique page views
+      const rate = uniquePageViews > 0
+        ? ((pathMetrics.count / uniquePageViews) * 100).toFixed(2)
+        : '0.00';
+
+      // Update the optin cell
       const optinDivs = optinCell.querySelectorAll('.flex.text-center > div');
 
       if (optinDivs.length >= 2) {
@@ -338,15 +371,21 @@
         optinDivs[0].textContent = pathMetrics.count.toString();
 
         // Update rate (second div)
-        optinDivs[1].textContent = `${pathMetrics.rate}%`;
+        optinDivs[1].textContent = `${rate}%`;
 
-        // Add a visual indicator that these are filtered metrics
-        optinCell.style.backgroundColor = '#f0fdf4'; // Light green background
+        // Add visual indicator
+        optinCell.style.backgroundColor = '#f0fdf4';
         optinCell.title = 'Qualified leads only';
+
+        console.log(`[Qualified Lead Metrics] Updated Path ${pathName}:`, {
+          qualifiedLeads: pathMetrics.count,
+          uniquePageViews: uniquePageViews,
+          rate: `${rate}%`
+        });
       }
 
     } catch (error) {
-      console.error('[Qualified Lead Metrics] Error updating row:', error);
+      console.error(`[Qualified Lead Metrics] Error updating row for path ${pathName}:`, error);
     }
   }
 
