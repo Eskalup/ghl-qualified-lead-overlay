@@ -1,0 +1,507 @@
+<!--
+  DEBUG VERSION - GoHighLevel Qualified Lead Metrics Overlay
+
+  This version has EXTENSIVE logging to help troubleshoot issues.
+
+  INSTALLATION:
+  1. Replace your current script with this one in GoHighLevel Custom Code
+  2. Save and refresh the page
+  3. Open Developer Console (F12)
+  4. Look for detailed log messages
+  5. Copy all the logs and send them for analysis
+
+  This will help us identify exactly where the issue is occurring.
+-->
+
+<script>
+console.log('🔧 [DEBUG] Script file loading...');
+
+(function() {
+  'use strict';
+
+  console.log('🔧 [DEBUG] IIFE started');
+
+  // ============================================================================
+  // CONFIGURATION
+  // ============================================================================
+
+  const CONFIG = {
+    ACCOUNT_ID: 'FKNp0s6MjnKx0dJcr7Ix',
+    FUNNEL_ID: 'lzZnur5Cjl3ERFlFki6A',
+    PUBLISHED_CSV_URL: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTi7bVNArCJ8e9ln-hROx2DPMTkvLD2GwQzN3zqv_KOducLGAXUvjc4X-a686C0SI874tKT2YVzLi-Q/pub?gid=0&single=true&output=csv',
+    COLUMNS: {
+      PATH: 7,
+      DATE: 9,
+      QUALIFIED: 10
+    },
+    UPDATE_DEBOUNCE_MS: 500,
+    CACHE_DURATION_MS: 60000,
+  };
+
+  console.log('🔧 [DEBUG] Configuration loaded:', CONFIG);
+
+  // ============================================================================
+  // URL CHECK
+  // ============================================================================
+
+  function shouldRunScript() {
+    const url = window.location.href;
+    console.log('🔧 [DEBUG] Current URL:', url);
+
+    const hasAccountId = url.includes(CONFIG.ACCOUNT_ID);
+    const hasFunnelId = url.includes(`funnels/${CONFIG.FUNNEL_ID}/stats`);
+
+    console.log('🔧 [DEBUG] URL Check Results:');
+    console.log('  - Contains Account ID?', hasAccountId);
+    console.log('  - Contains Funnel ID?', hasFunnelId);
+    console.log('  - Should run?', hasAccountId && hasFunnelId);
+
+    return hasAccountId && hasFunnelId;
+  }
+
+  if (!shouldRunScript()) {
+    console.log('❌ [DEBUG] Script will NOT run - URL does not match target page');
+    console.log('Expected Account ID:', CONFIG.ACCOUNT_ID);
+    console.log('Expected Funnel ID:', CONFIG.FUNNEL_ID);
+    return;
+  }
+
+  console.log('✅ [DEBUG] URL check passed! Script will run on this page.');
+
+  // ============================================================================
+  // DATA FETCHING
+  // ============================================================================
+
+  let cachedData = null;
+  let cacheTimestamp = 0;
+
+  async function fetchGoogleSheetData() {
+    const now = Date.now();
+    console.log('🔧 [DEBUG] fetchGoogleSheetData called');
+
+    if (cachedData && (now - cacheTimestamp) < CONFIG.CACHE_DURATION_MS) {
+      console.log('✅ [DEBUG] Using cached data');
+      return cachedData;
+    }
+
+    try {
+      console.log('🔧 [DEBUG] Fetching from URL:', CONFIG.PUBLISHED_CSV_URL);
+      const response = await fetch(CONFIG.PUBLISHED_CSV_URL);
+      console.log('🔧 [DEBUG] Fetch response status:', response.status, response.statusText);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const csvText = await response.text();
+      console.log('🔧 [DEBUG] CSV text length:', csvText.length);
+      console.log('🔧 [DEBUG] First 200 chars:', csvText.substring(0, 200));
+
+      const data = parseCSV(csvText);
+      console.log('🔧 [DEBUG] Parsed rows:', data.length);
+      if (data.length > 0) {
+        console.log('🔧 [DEBUG] First row:', data[0]);
+      }
+
+      cachedData = data;
+      cacheTimestamp = now;
+
+      console.log('✅ [DEBUG] Successfully fetched and parsed', data.length, 'rows');
+      return data;
+
+    } catch (error) {
+      console.error('❌ [DEBUG] Error fetching data:', error);
+      console.error('Error details:', error.message, error.stack);
+      return null;
+    }
+  }
+
+  function parseCSV(csvText) {
+    console.log('🔧 [DEBUG] parseCSV called');
+    const lines = csvText.split('\n');
+    const data = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+
+      const values = line.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g) || [];
+      const cleanValues = values.map(v => v.replace(/^"|"$/g, '').trim());
+      data.push(cleanValues);
+    }
+
+    console.log('🔧 [DEBUG] parseCSV completed, rows parsed:', data.length);
+    return data;
+  }
+
+  // ============================================================================
+  // DATE PARSING
+  // ============================================================================
+
+  function getDateRangeFromUI() {
+    console.log('🔧 [DEBUG] getDateRangeFromUI called');
+
+    try {
+      const dateInputs = document.querySelectorAll('.n-input--pair input[type="text"]');
+      console.log('🔧 [DEBUG] Found', dateInputs.length, 'date inputs');
+
+      if (dateInputs.length < 2) {
+        console.warn('⚠️ [DEBUG] Not enough date inputs found!');
+        console.log('🔧 [DEBUG] Looking for alternative date picker...');
+
+        // Try alternative selectors
+        const allInputs = document.querySelectorAll('input[type="text"]');
+        console.log('🔧 [DEBUG] Total text inputs on page:', allInputs.length);
+        allInputs.forEach((input, i) => {
+          if (input.placeholder && (input.placeholder.includes('Date') || input.placeholder.includes('date'))) {
+            console.log(`🔧 [DEBUG] Input ${i}:`, input.placeholder, '=', input.value);
+          }
+        });
+
+        return null;
+      }
+
+      const startDateStr = dateInputs[0].value;
+      const endDateStr = dateInputs[1].value;
+
+      console.log('🔧 [DEBUG] Start date value:', startDateStr);
+      console.log('🔧 [DEBUG] End date value:', endDateStr);
+
+      if (!startDateStr || !endDateStr) {
+        console.warn('⚠️ [DEBUG] Date values are empty!');
+        return null;
+      }
+
+      const startDate = new Date(startDateStr);
+      const endDate = new Date(endDateStr);
+
+      startDate.setHours(0, 0, 0, 0);
+      endDate.setHours(23, 59, 59, 999);
+
+      console.log('🔧 [DEBUG] Parsed start date:', startDate);
+      console.log('🔧 [DEBUG] Parsed end date:', endDate);
+      console.log('✅ [DEBUG] Date range successfully parsed');
+
+      return { startDate, endDate };
+
+    } catch (error) {
+      console.error('❌ [DEBUG] Error parsing dates:', error);
+      return null;
+    }
+  }
+
+  function parseSheetDate(dateStr) {
+    if (!dateStr) return null;
+
+    try {
+      let cleanedDate = dateStr.replace(/(\d+)(st|nd|rd|th)/gi, '$1');
+      const date = new Date(cleanedDate);
+
+      if (isNaN(date.getTime())) {
+        return null;
+      }
+
+      return date;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  // ============================================================================
+  // DATA PROCESSING
+  // ============================================================================
+
+  function calculateQualifiedMetrics(data, dateRange) {
+    console.log('🔧 [DEBUG] calculateQualifiedMetrics called');
+    console.log('🔧 [DEBUG] Data rows:', data ? data.length : 0);
+    console.log('🔧 [DEBUG] Date range:', dateRange);
+
+    if (!data || !dateRange) {
+      console.warn('⚠️ [DEBUG] Missing data or dateRange');
+      return null;
+    }
+
+    const { startDate, endDate } = dateRange;
+    const metrics = {
+      pathA: { count: 0, total: 0 },
+      pathB: { count: 0, total: 0 }
+    };
+
+    let processedRows = 0;
+    let skippedRows = 0;
+
+    data.forEach((row, index) => {
+      const path = row[CONFIG.COLUMNS.PATH]?.trim().toUpperCase();
+      const dateStr = row[CONFIG.COLUMNS.DATE]?.trim();
+      const qualified = row[CONFIG.COLUMNS.QUALIFIED]?.trim().toLowerCase();
+
+      // Log first 3 rows for debugging
+      if (index < 3) {
+        console.log(`🔧 [DEBUG] Row ${index}:`, {
+          path: path,
+          date: dateStr,
+          qualified: qualified
+        });
+      }
+
+      const rowDate = parseSheetDate(dateStr);
+      if (!rowDate) {
+        skippedRows++;
+        return;
+      }
+
+      if (rowDate < startDate || rowDate > endDate) {
+        return;
+      }
+
+      processedRows++;
+
+      if (path === 'A') {
+        metrics.pathA.total++;
+        if (qualified === 'si') {
+          metrics.pathA.count++;
+        }
+      } else if (path === 'B') {
+        metrics.pathB.total++;
+        if (qualified === 'si') {
+          metrics.pathB.count++;
+        }
+      }
+    });
+
+    console.log('🔧 [DEBUG] Processing complete:');
+    console.log('  - Processed rows:', processedRows);
+    console.log('  - Skipped rows:', skippedRows);
+
+    metrics.pathA.rate = metrics.pathA.total > 0
+      ? (metrics.pathA.count / metrics.pathA.total * 100).toFixed(2)
+      : '0.00';
+
+    metrics.pathB.rate = metrics.pathB.total > 0
+      ? (metrics.pathB.count / metrics.pathB.total * 100).toFixed(2)
+      : '0.00';
+
+    console.log('✅ [DEBUG] Calculated metrics:', metrics);
+
+    return metrics;
+  }
+
+  // ============================================================================
+  // DOM MANIPULATION
+  // ============================================================================
+
+  function updateOptinMetrics(metrics) {
+    console.log('🔧 [DEBUG] updateOptinMetrics called');
+    console.log('🔧 [DEBUG] Metrics:', metrics);
+
+    if (!metrics) {
+      console.warn('⚠️ [DEBUG] No metrics to update');
+      return;
+    }
+
+    try {
+      const tbody = document.querySelector('.n-data-table-tbody');
+      console.log('🔧 [DEBUG] Table body found:', !!tbody);
+
+      if (!tbody) {
+        console.error('❌ [DEBUG] Table body not found!');
+        console.log('🔧 [DEBUG] Looking for alternatives...');
+
+        // Try to find any table
+        const tables = document.querySelectorAll('table');
+        console.log('🔧 [DEBUG] Found', tables.length, 'tables on page');
+
+        const dataTables = document.querySelectorAll('[class*="data-table"]');
+        console.log('🔧 [DEBUG] Found', dataTables.length, 'elements with "data-table" in class');
+
+        return;
+      }
+
+      const rows = tbody.querySelectorAll('tr.n-data-table-tr');
+      console.log('🔧 [DEBUG] Found', rows.length, 'table rows');
+
+      if (rows.length < 2) {
+        console.warn('⚠️ [DEBUG] Expected at least 2 rows, found', rows.length);
+        return;
+      }
+
+      console.log('🔧 [DEBUG] Updating Path A (row 0)');
+      updateRow(rows[0], metrics.pathA, 'A');
+
+      console.log('🔧 [DEBUG] Updating Path B (row 1)');
+      updateRow(rows[1], metrics.pathB, 'B');
+
+      console.log('✅ [DEBUG] Metrics updated successfully!');
+
+    } catch (error) {
+      console.error('❌ [DEBUG] Error updating metrics:', error);
+      console.error('Error details:', error.message, error.stack);
+    }
+  }
+
+  function updateRow(row, pathMetrics, pathName) {
+    console.log(`🔧 [DEBUG] updateRow for path ${pathName}`);
+
+    try {
+      const optinCell = row.querySelector('td[data-col-key="optinsAll"]');
+      console.log(`🔧 [DEBUG] Optin cell found for path ${pathName}:`, !!optinCell);
+
+      if (!optinCell) {
+        console.error(`❌ [DEBUG] Optin cell not found for path ${pathName}!`);
+
+        // Log all cells in this row
+        const allCells = row.querySelectorAll('td');
+        console.log(`🔧 [DEBUG] Row has ${allCells.length} cells`);
+        allCells.forEach((cell, i) => {
+          console.log(`  Cell ${i}:`, cell.getAttribute('data-col-key'));
+        });
+
+        return;
+      }
+
+      const optinDivs = optinCell.querySelectorAll('.flex.text-center > div');
+      console.log(`🔧 [DEBUG] Found ${optinDivs.length} divs in optin cell`);
+
+      if (optinDivs.length >= 2) {
+        console.log(`🔧 [DEBUG] Updating Path ${pathName}:`);
+        console.log(`  - Count: ${pathMetrics.count}`);
+        console.log(`  - Rate: ${pathMetrics.rate}%`);
+
+        optinDivs[0].textContent = pathMetrics.count.toString();
+        optinDivs[1].textContent = `${pathMetrics.rate}%`;
+
+        optinCell.style.backgroundColor = '#f0fdf4';
+        optinCell.title = 'Qualified leads only';
+
+        console.log(`✅ [DEBUG] Path ${pathName} updated successfully`);
+      } else {
+        console.warn(`⚠️ [DEBUG] Not enough divs in optin cell for path ${pathName}`);
+      }
+
+    } catch (error) {
+      console.error(`❌ [DEBUG] Error updating row for path ${pathName}:`, error);
+    }
+  }
+
+  // ============================================================================
+  // MAIN EXECUTION
+  // ============================================================================
+
+  let updateTimeout = null;
+
+  async function updateMetrics() {
+    console.log('🔧 [DEBUG] ========================================');
+    console.log('🔧 [DEBUG] updateMetrics called');
+    console.log('🔧 [DEBUG] ========================================');
+
+    const dateRange = getDateRangeFromUI();
+    if (!dateRange) {
+      console.warn('⚠️ [DEBUG] Could not get date range, will retry...');
+      return;
+    }
+
+    const data = await fetchGoogleSheetData();
+    if (!data) {
+      console.error('❌ [DEBUG] Could not fetch data');
+      return;
+    }
+
+    const metrics = calculateQualifiedMetrics(data, dateRange);
+    updateOptinMetrics(metrics);
+
+    console.log('🔧 [DEBUG] ========================================');
+    console.log('🔧 [DEBUG] updateMetrics completed');
+    console.log('🔧 [DEBUG] ========================================');
+  }
+
+  function scheduleUpdate() {
+    console.log('🔧 [DEBUG] scheduleUpdate called');
+    if (updateTimeout) {
+      clearTimeout(updateTimeout);
+    }
+
+    updateTimeout = setTimeout(() => {
+      updateMetrics();
+    }, CONFIG.UPDATE_DEBOUNCE_MS);
+  }
+
+  function init() {
+    console.log('🔧 [DEBUG] ========================================');
+    console.log('🔧 [DEBUG] INITIALIZATION STARTING');
+    console.log('🔧 [DEBUG] ========================================');
+
+    if (document.readyState === 'loading') {
+      console.log('🔧 [DEBUG] Document still loading, waiting for DOMContentLoaded...');
+      document.addEventListener('DOMContentLoaded', init);
+      return;
+    }
+
+    console.log('🔧 [DEBUG] Document ready state:', document.readyState);
+
+    // Initial update after delay
+    console.log('🔧 [DEBUG] Scheduling initial update in 1 second...');
+    setTimeout(() => {
+      console.log('🔧 [DEBUG] Running initial update now');
+      updateMetrics();
+    }, 1000);
+
+    // Set up mutation observer
+    console.log('🔧 [DEBUG] Setting up MutationObserver...');
+    const observer = new MutationObserver((mutations) => {
+      const shouldUpdate = mutations.some(mutation => {
+        const target = mutation.target;
+        return target.classList?.contains('n-data-table-tbody') ||
+               target.classList?.contains('n-input--pair') ||
+               target.closest?.('.n-data-table-tbody') ||
+               target.closest?.('.n-input--pair');
+      });
+
+      if (shouldUpdate) {
+        console.log('🔧 [DEBUG] Mutation detected, scheduling update');
+        scheduleUpdate();
+      }
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['class', 'value']
+    });
+
+    console.log('✅ [DEBUG] MutationObserver started');
+
+    // URL observer
+    let lastUrl = window.location.href;
+    const urlObserver = new MutationObserver(() => {
+      const currentUrl = window.location.href;
+      if (currentUrl !== lastUrl) {
+        console.log('🔧 [DEBUG] URL changed from', lastUrl, 'to', currentUrl);
+        lastUrl = currentUrl;
+
+        if (!shouldRunScript()) {
+          observer.disconnect();
+          console.log('🔧 [DEBUG] Navigated away from target page, stopping');
+        }
+      }
+    });
+
+    urlObserver.observe(document.querySelector('title') || document.body, {
+      subtree: true,
+      characterData: true,
+      childList: true
+    });
+
+    console.log('🔧 [DEBUG] ========================================');
+    console.log('✅ [DEBUG] INITIALIZATION COMPLETE');
+    console.log('🔧 [DEBUG] ========================================');
+  }
+
+  // Start
+  console.log('🔧 [DEBUG] Calling init()...');
+  init();
+
+})();
+
+console.log('🔧 [DEBUG] Script file loaded completely');
+</script>
