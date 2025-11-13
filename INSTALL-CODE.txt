@@ -481,7 +481,18 @@
       clearInterval(pollingInterval);
     }
 
-    console.log('[Qualified Lead Metrics] Starting aggressive 10-second polling...');
+    // Store metrics locally to avoid recalculating
+    const data = cachedData.data;
+    if (!data) {
+      console.warn('[Qualified Lead Metrics] No cached data available for polling');
+      return;
+    }
+
+    const metrics = calculateQualifiedMetrics(data, dateRange);
+    console.log('[Qualified Lead Metrics] Starting aggressive 10-second polling...', {
+      pathA: metrics.pathA.count,
+      pathB: metrics.pathB.count
+    });
 
     let pollCount = 0;
     const MAX_POLLS = 20; // Poll for 10 seconds (20 × 500ms)
@@ -489,27 +500,42 @@
     pollingInterval = setInterval(() => {
       pollCount++;
 
-      // Aggressively re-apply metrics every 500ms, no matter what
-      const data = cachedData.data;
-      if (data) {
-        const metrics = calculateQualifiedMetrics(data, dateRange);
+      // Log every iteration for debugging
+      if (pollCount === 1 || pollCount % 4 === 0) {
+        console.log(`[Qualified Lead Metrics] Poll ${pollCount}/${MAX_POLLS}...`);
+      }
 
-        // Update rows directly - no waiting, no checking loading state
-        const detailsSection = document.querySelector('#funnel-stats-details');
-        if (detailsSection) {
-          const tbody = detailsSection.querySelector('.n-data-table-tbody');
-          if (tbody) {
-            const rows = tbody.querySelectorAll('tr.n-data-table-tr');
-            if (rows.length >= 2) {
-              // Silent updates - only log every 4th iteration to reduce console noise
-              if (pollCount % 4 === 0 || pollCount === 1) {
-                console.log(`[Qualified Lead Metrics] Poll ${pollCount}/${MAX_POLLS}: Applying metrics...`);
-              }
-              updateRow(rows[0], metrics.pathA, 'A');
-              updateRow(rows[1], metrics.pathB, 'B');
-            }
-          }
+      // Aggressively re-apply metrics every 500ms, no matter what
+      const detailsSection = document.querySelector('#funnel-stats-details');
+      if (!detailsSection) {
+        if (pollCount === 1) {
+          console.warn('[Qualified Lead Metrics] Details section not found during polling');
         }
+        return;
+      }
+
+      const tbody = detailsSection.querySelector('.n-data-table-tbody');
+      if (!tbody) {
+        if (pollCount === 1) {
+          console.warn('[Qualified Lead Metrics] Table body not found during polling');
+        }
+        return;
+      }
+
+      const rows = tbody.querySelectorAll('tr.n-data-table-tr');
+      if (rows.length < 2) {
+        if (pollCount === 1) {
+          console.warn('[Qualified Lead Metrics] Not enough rows during polling:', rows.length);
+        }
+        return;
+      }
+
+      // Apply metrics
+      updateRow(rows[0], metrics.pathA, 'A');
+      updateRow(rows[1], metrics.pathB, 'B');
+
+      if (pollCount === 1 || pollCount % 4 === 0) {
+        console.log(`[Qualified Lead Metrics] Applied metrics at poll ${pollCount}`);
       }
 
       // Stop polling after 10 seconds
