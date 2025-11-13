@@ -495,6 +495,9 @@
       return;
     }
 
+    let lastTableUpdate = 0;
+    const MIN_UPDATE_INTERVAL = 1000; // Don't update more than once per second
+
     tableObserver = new MutationObserver((mutations) => {
       // Check if the table content was actually modified
       const hasRelevantChanges = mutations.some(mutation => {
@@ -504,8 +507,29 @@
       });
 
       if (hasRelevantChanges && !isUpdating) {
-        console.log('[Qualified Lead Metrics] Table updated by GHL, re-applying metrics...');
-        scheduleUpdate();
+        const now = Date.now();
+
+        // Throttle updates to prevent rapid re-triggers
+        if (now - lastTableUpdate < MIN_UPDATE_INTERVAL) {
+          return;
+        }
+        lastTableUpdate = now;
+
+        // Check if GHL is currently loading - if so, don't trigger yet
+        const loadingSpinner = document.querySelector('#funnel-stats-details .n-spin');
+        const loadingBar = document.querySelector('#funnel-stats-details .n-progress');
+
+        if (loadingSpinner || loadingBar) {
+          console.log('[Qualified Lead Metrics] GHL is loading, will wait...');
+          // Schedule an update with longer delay to wait for GHL to finish
+          setTimeout(() => {
+            console.log('[Qualified Lead Metrics] GHL finished loading, re-applying metrics...');
+            scheduleUpdate();
+          }, 1500); // Wait 1.5 seconds for GHL to finish
+        } else {
+          console.log('[Qualified Lead Metrics] Table updated by GHL, re-applying metrics...');
+          scheduleUpdate();
+        }
       }
     });
 
