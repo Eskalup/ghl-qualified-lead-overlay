@@ -435,10 +435,10 @@
       if (lastDateKey === dateKey && hasSucceeded) {
         console.log('[Qualified Lead Metrics] Dates unchanged, skipping fetch but re-applying display');
         // Re-apply the display in case the table was refreshed by GHL
-        const data = cachedData.data;
+        const data = cachedData;  // cachedData IS the data array
         if (data) {
           const metrics = calculateQualifiedMetrics(data, dateRange);
-          updateOptinMetrics(metrics);
+          await updateOptinMetrics(metrics);
         }
         isUpdating = false;
         return;
@@ -482,7 +482,7 @@
     }
 
     // Store metrics locally to avoid recalculating
-    const data = cachedData.data;
+    const data = cachedData;  // cachedData IS the data array
     if (!data) {
       console.warn('[Qualified Lead Metrics] No cached data available for polling');
       return;
