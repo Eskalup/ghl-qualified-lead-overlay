@@ -398,57 +398,80 @@
   let hasSucceeded = false;
   let lastDateKey = null;
   let dateListenersAttached = false;
+  let isUpdating = false;
+  let tableObserver = null;
 
   /**
    * Main function to fetch data and update metrics
    */
   async function updateMetrics() {
+    if (isUpdating) {
+      console.log('[Qualified Lead Metrics] Update already in progress, skipping...');
+      return;
+    }
+
+    isUpdating = true;
     console.log('[Qualified Lead Metrics] Attempting to update metrics...');
 
-    // Get date range from UI
-    const dateRange = getDateRangeFromUI();
-    if (!dateRange) {
-      if (!hasSucceeded && retryCount < CONFIG.MAX_RETRIES) {
-        retryCount++;
-        console.log(`[Qualified Lead Metrics] Retry ${retryCount}/${CONFIG.MAX_RETRIES} in ${CONFIG.RETRY_DELAY_MS/1000} seconds...`);
-        setTimeout(updateMetrics, CONFIG.RETRY_DELAY_MS);
+    try {
+      // Get date range from UI
+      const dateRange = getDateRangeFromUI();
+      if (!dateRange) {
+        if (!hasSucceeded && retryCount < CONFIG.MAX_RETRIES) {
+          retryCount++;
+          console.log(`[Qualified Lead Metrics] Retry ${retryCount}/${CONFIG.MAX_RETRIES} in ${CONFIG.RETRY_DELAY_MS/1000} seconds...`);
+          isUpdating = false;
+          setTimeout(updateMetrics, CONFIG.RETRY_DELAY_MS);
+          return;
+        }
+
+        if (!hasSucceeded) {
+          console.error('[Qualified Lead Metrics] ❌ Failed to find date picker after', CONFIG.MAX_RETRIES, 'attempts');
+        }
+        isUpdating = false;
         return;
       }
 
-      if (!hasSucceeded) {
-        console.error('[Qualified Lead Metrics] ❌ Failed to find date picker after', CONFIG.MAX_RETRIES, 'attempts');
+      // Check if dates have actually changed
+      const dateKey = `${dateRange.startDate.getTime()}-${dateRange.endDate.getTime()}`;
+      if (lastDateKey === dateKey && hasSucceeded) {
+        console.log('[Qualified Lead Metrics] Dates unchanged, skipping fetch but re-applying display');
+        // Re-apply the display in case the table was refreshed by GHL
+        const data = cachedData.data;
+        if (data) {
+          const metrics = calculateQualifiedMetrics(data, dateRange);
+          updateOptinMetrics(metrics);
+        }
+        isUpdating = false;
+        return;
       }
-      return;
-    }
+      lastDateKey = dateKey;
 
-    // Check if dates have actually changed
-    const dateKey = `${dateRange.startDate.getTime()}-${dateRange.endDate.getTime()}`;
-    if (lastDateKey === dateKey) {
-      console.log('[Qualified Lead Metrics] Dates unchanged, skipping update');
-      return;
-    }
-    lastDateKey = dateKey;
+      // Fetch Google Sheet data
+      const data = await fetchGoogleSheetData();
+      if (!data) {
+        console.error('[Qualified Lead Metrics] Could not fetch data from Google Sheets');
+        isUpdating = false;
+        return;
+      }
 
-    // Fetch Google Sheet data
-    const data = await fetchGoogleSheetData();
-    if (!data) {
-      console.error('[Qualified Lead Metrics] Could not fetch data from Google Sheets');
-      return;
-    }
+      // Calculate metrics
+      const metrics = calculateQualifiedMetrics(data, dateRange);
 
-    // Calculate metrics
-    const metrics = calculateQualifiedMetrics(data, dateRange);
+      // Update DOM
+      updateOptinMetrics(metrics);
 
-    // Update DOM
-    updateOptinMetrics(metrics);
+      // Mark as succeeded
+      hasSucceeded = true;
+      retryCount = 0;
 
-    // Mark as succeeded
-    hasSucceeded = true;
-    retryCount = 0;
-
-    // Set up date change listeners after first successful update
-    if (!dateListenersAttached) {
-      attachDateChangeListeners();
+      // Set up observers after first successful update
+      if (!dateListenersAttached) {
+        attachDateChangeListeners();
+        attachTableObserver();
+      }
+    } finally {
+      isUpdating = false;
     }
   }
 
@@ -472,6 +495,42 @@
       dateListenersAttached = true;
       console.log('[Qualified Lead Metrics] Date change listeners attached');
     }
+  }
+
+  /**
+   * Attach observer to watch for table refreshes by GoHighLevel
+   */
+  function attachTableObserver() {
+    // Watch for changes to the details table so we can re-apply our updates
+    // if GoHighLevel refreshes it
+    const detailsSection = document.querySelector('#funnel-stats-details');
+    if (!detailsSection) {
+      console.warn('[Qualified Lead Metrics] Could not find details section for observation');
+      return;
+    }
+
+    tableObserver = new MutationObserver((mutations) => {
+      // Check if the table content was actually modified
+      const hasRelevantChanges = mutations.some(mutation => {
+        // Only trigger on childList changes or specific attribute changes
+        return mutation.type === 'childList' ||
+               (mutation.type === 'attributes' && mutation.attributeName === 'class');
+      });
+
+      if (hasRelevantChanges && !isUpdating) {
+        console.log('[Qualified Lead Metrics] Table updated by GHL, re-applying metrics...');
+        scheduleUpdate();
+      }
+    });
+
+    tableObserver.observe(detailsSection, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['class']
+    });
+
+    console.log('[Qualified Lead Metrics] Table observer attached');
   }
 
   /**
@@ -515,6 +574,9 @@
         // Check if we should still run
         if (!shouldRunScript()) {
           urlObserver.disconnect();
+          if (tableObserver) {
+            tableObserver.disconnect();
+          }
           console.log('[Qualified Lead Metrics] Navigated away from target page, stopping');
         }
       }
@@ -526,7 +588,7 @@
       childList: true
     });
 
-    console.log('[Qualified Lead Metrics] Initialized - will update on page load and date changes only');
+    console.log('[Qualified Lead Metrics] Initialized - will update on page load, date changes, and table refreshes');
   }
 
   // Expose updateMetrics for manual testing (test.html)
