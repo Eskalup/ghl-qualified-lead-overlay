@@ -31,6 +31,9 @@
     // Performance settings
     UPDATE_DEBOUNCE_MS: 500,
     CACHE_DURATION_MS: 60000, // 1 minute cache
+    INITIAL_DELAY_MS: 3000,   // Wait 3 seconds for page to load
+    RETRY_DELAY_MS: 2000,     // Retry every 2 seconds
+    MAX_RETRIES: 10           // Try up to 10 times
   };
 
   // ============================================================================
@@ -137,16 +140,27 @@
    */
   function getDateRangeFromUI() {
     try {
-      // Find the date picker inputs
-      const dateInputs = document.querySelectorAll('.n-input--pair input[type="text"]');
+      // Find date inputs by placeholder text
+      const allInputs = document.querySelectorAll('input[type="text"]');
+      let startInput = null;
+      let endInput = null;
 
-      if (dateInputs.length < 2) {
+      allInputs.forEach(input => {
+        const placeholder = input.placeholder?.toLowerCase() || '';
+        if (placeholder.includes('start') && placeholder.includes('date')) {
+          startInput = input;
+        } else if (placeholder.includes('end') && placeholder.includes('date')) {
+          endInput = input;
+        }
+      });
+
+      if (!startInput || !endInput) {
         console.warn('[Qualified Lead Metrics] Date inputs not found');
         return null;
       }
 
-      const startDateStr = dateInputs[0].value;
-      const endDateStr = dateInputs[1].value;
+      const startDateStr = startInput.value;
+      const endDateStr = endInput.value;
 
       if (!startDateStr || !endDateStr) {
         console.warn('[Qualified Lead Metrics] Date values not set');
@@ -337,28 +351,39 @@
   }
 
   // ============================================================================
-  // MAIN EXECUTION
+  // MAIN EXECUTION WITH RETRY LOGIC
   // ============================================================================
 
   let updateTimeout = null;
+  let retryCount = 0;
+  let hasSucceeded = false;
 
   /**
    * Main function to fetch data and update metrics
    */
   async function updateMetrics() {
-    console.log('[Qualified Lead Metrics] Updating metrics...');
+    console.log('[Qualified Lead Metrics] Attempting to update metrics...');
 
     // Get date range from UI
     const dateRange = getDateRangeFromUI();
     if (!dateRange) {
-      console.warn('[Qualified Lead Metrics] Could not get date range, will retry...');
+      if (!hasSucceeded && retryCount < CONFIG.MAX_RETRIES) {
+        retryCount++;
+        console.log(`[Qualified Lead Metrics] Retry ${retryCount}/${CONFIG.MAX_RETRIES} in ${CONFIG.RETRY_DELAY_MS/1000} seconds...`);
+        setTimeout(updateMetrics, CONFIG.RETRY_DELAY_MS);
+        return;
+      }
+
+      if (!hasSucceeded) {
+        console.error('[Qualified Lead Metrics] ❌ Failed to find date picker after', CONFIG.MAX_RETRIES, 'attempts');
+      }
       return;
     }
 
     // Fetch Google Sheet data
     const data = await fetchGoogleSheetData();
     if (!data) {
-      console.error('[Qualified Lead Metrics] Could not fetch data');
+      console.error('[Qualified Lead Metrics] Could not fetch data from Google Sheets');
       return;
     }
 
@@ -367,6 +392,10 @@
 
     // Update DOM
     updateOptinMetrics(metrics);
+
+    // Mark as succeeded
+    hasSucceeded = true;
+    retryCount = 0;
   }
 
   /**
@@ -394,26 +423,30 @@
       return;
     }
 
-    // Initial update after a short delay to let the page render
+    // Initial update with longer delay to let the page render
+    console.log(`[Qualified Lead Metrics] Waiting ${CONFIG.INITIAL_DELAY_MS/1000} seconds for page to load...`);
     setTimeout(() => {
       updateMetrics();
-    }, 1000);
+    }, CONFIG.INITIAL_DELAY_MS);
 
     // Watch for changes to the table or date picker
     const observer = new MutationObserver((mutations) => {
-      // Check if the mutations affect our target elements
-      const shouldUpdate = mutations.some(mutation => {
-        const target = mutation.target;
+      // Only schedule updates if we've already succeeded once
+      if (hasSucceeded) {
+        // Check if the mutations affect our target elements
+        const shouldUpdate = mutations.some(mutation => {
+          const target = mutation.target;
 
-        // Check if it's the table or date picker
-        return target.classList?.contains('n-data-table-tbody') ||
-               target.classList?.contains('n-input--pair') ||
-               target.closest?.('.n-data-table-tbody') ||
-               target.closest?.('.n-input--pair');
-      });
+          // Check if it's the table or date picker
+          return target.classList?.contains('n-data-table-tbody') ||
+                 target.classList?.contains('n-input') ||
+                 target.closest?.('.n-data-table-tbody') ||
+                 target.closest?.('.n-input');
+        });
 
-      if (shouldUpdate) {
-        scheduleUpdate();
+        if (shouldUpdate) {
+          scheduleUpdate();
+        }
       }
     });
 
