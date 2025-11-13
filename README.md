@@ -2,6 +2,12 @@
 
 This JavaScript code replaces the opt-in metrics in your GoHighLevel funnel stats page with qualified lead data from a Google Sheet.
 
+## 🚀 Quick Start
+
+**For installation in GoHighLevel:** Use the `INSTALL-CODE.txt` file - it contains the complete code with `<script>` tags ready to paste into GoHighLevel's Custom Code section.
+
+**For development:** The `ghl-qualified-lead-metrics.js` file contains the raw JavaScript without tags for easier editing and version control.
+
 ## Features
 
 - **Targeted Loading**: Only runs on the specific account and funnel page to minimize performance impact
@@ -31,11 +37,14 @@ Your Google Sheet needs to be published as CSV for the script to access it:
 
 ### 2. Install the Script in GoHighLevel
 
-1. Log in to your GoHighLevel account
+1. Log in to your GoHighLevel agency account
 2. Navigate to **Agency Settings** → **Custom Code**
-3. Copy the entire contents of `ghl-qualified-lead-metrics.js`
-4. Paste it into the **Custom Code** section
-5. Save the settings
+3. Open the file `INSTALL-CODE.txt` in this repository
+4. Copy **EVERYTHING** in that file (from `<script>` to `</script>`)
+5. Paste it into the **Custom Code** section
+6. Click **Save**
+
+**Important:** You must use the `INSTALL-CODE.txt` file, not the `ghl-qualified-lead-metrics.js` file, because GoHighLevel requires the code to be wrapped in `<script>` tags.
 
 ### 3. Verify Installation
 
