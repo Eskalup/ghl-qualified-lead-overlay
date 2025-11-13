@@ -396,6 +396,8 @@
   let updateTimeout = null;
   let retryCount = 0;
   let hasSucceeded = false;
+  let lastDateKey = null;
+  let dateListenersAttached = false;
 
   /**
    * Main function to fetch data and update metrics
@@ -419,6 +421,14 @@
       return;
     }
 
+    // Check if dates have actually changed
+    const dateKey = `${dateRange.startDate.getTime()}-${dateRange.endDate.getTime()}`;
+    if (lastDateKey === dateKey) {
+      console.log('[Qualified Lead Metrics] Dates unchanged, skipping update');
+      return;
+    }
+    lastDateKey = dateKey;
+
     // Fetch Google Sheet data
     const data = await fetchGoogleSheetData();
     if (!data) {
@@ -435,6 +445,33 @@
     // Mark as succeeded
     hasSucceeded = true;
     retryCount = 0;
+
+    // Set up date change listeners after first successful update
+    if (!dateListenersAttached) {
+      attachDateChangeListeners();
+    }
+  }
+
+  /**
+   * Attach event listeners to date picker inputs
+   */
+  function attachDateChangeListeners() {
+    const dateInputs = Array.from(document.querySelectorAll('input[type="text"]'))
+      .filter(input => {
+        const placeholder = input.placeholder?.toLowerCase() || '';
+        return placeholder.includes('start') && placeholder.includes('date') ||
+               placeholder.includes('end') && placeholder.includes('date');
+      });
+
+    if (dateInputs.length >= 2) {
+      dateInputs.forEach(input => {
+        // Listen for changes to the date inputs
+        input.addEventListener('change', scheduleUpdate);
+        input.addEventListener('blur', scheduleUpdate);
+      });
+      dateListenersAttached = true;
+      console.log('[Qualified Lead Metrics] Date change listeners attached');
+    }
   }
 
   /**
@@ -468,35 +505,6 @@
       updateMetrics();
     }, CONFIG.INITIAL_DELAY_MS);
 
-    // Watch for changes to the table or date picker
-    const observer = new MutationObserver((mutations) => {
-      // Only schedule updates if we've already succeeded once
-      if (hasSucceeded) {
-        // Check if the mutations affect our target elements
-        const shouldUpdate = mutations.some(mutation => {
-          const target = mutation.target;
-
-          // Check if it's the table or date picker
-          return target.classList?.contains('n-data-table-tbody') ||
-                 target.classList?.contains('n-input') ||
-                 target.closest?.('.n-data-table-tbody') ||
-                 target.closest?.('.n-input');
-        });
-
-        if (shouldUpdate) {
-          scheduleUpdate();
-        }
-      }
-    });
-
-    // Start observing the document for changes
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ['class', 'value']
-    });
-
     // Listen for URL changes (in case of SPA navigation)
     let lastUrl = window.location.href;
     const urlObserver = new MutationObserver(() => {
@@ -506,7 +514,7 @@
 
         // Check if we should still run
         if (!shouldRunScript()) {
-          observer.disconnect();
+          urlObserver.disconnect();
           console.log('[Qualified Lead Metrics] Navigated away from target page, stopping');
         }
       }
@@ -518,7 +526,7 @@
       childList: true
     });
 
-    console.log('[Qualified Lead Metrics] Initialized successfully');
+    console.log('[Qualified Lead Metrics] Initialized - will update on page load and date changes only');
   }
 
   // Expose updateMetrics for manual testing (test.html)
