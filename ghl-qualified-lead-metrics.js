@@ -531,8 +531,8 @@
   }
 
   /**
-   * Poll and re-apply metrics for several seconds after an update
-   * This ensures metrics persist even if GHL does multiple refreshes
+   * Aggressively re-apply metrics for 10 seconds after page load or date change
+   * This brute-force approach ensures metrics persist through all GHL refreshes
    */
   function startPolling(dateRange) {
     // Clear any existing polling
@@ -540,35 +540,44 @@
       clearInterval(pollingInterval);
     }
 
-    console.log('[Qualified Lead Metrics] Starting polling to ensure metrics persist...');
+    console.log('[Qualified Lead Metrics] Starting aggressive 10-second polling...');
 
     let pollCount = 0;
-    const MAX_POLLS = 8; // Poll for 8 seconds (8 polls × 1 second)
+    const MAX_POLLS = 20; // Poll for 10 seconds (20 × 500ms)
 
-    pollingInterval = setInterval(async () => {
+    pollingInterval = setInterval(() => {
       pollCount++;
 
-      // Check if table is stable (not loading)
-      const loadingSpinner = document.querySelector('#funnel-stats-details .n-spin');
-      const loadingBar = document.querySelector('#funnel-stats-details .n-progress');
+      // Aggressively re-apply metrics every 500ms, no matter what
+      const data = cachedData.data;
+      if (data) {
+        const metrics = calculateQualifiedMetrics(data, dateRange);
 
-      if (!loadingSpinner && !loadingBar && !isUpdating) {
-        // Table is stable, re-apply metrics
-        const data = cachedData.data;
-        if (data) {
-          const metrics = calculateQualifiedMetrics(data, dateRange);
-          console.log('[Qualified Lead Metrics] Polling: re-applying metrics...');
-          await updateOptinMetrics(metrics);
+        // Update rows directly - no waiting, no checking loading state
+        const detailsSection = document.querySelector('#funnel-stats-details');
+        if (detailsSection) {
+          const tbody = detailsSection.querySelector('.n-data-table-tbody');
+          if (tbody) {
+            const rows = tbody.querySelectorAll('tr.n-data-table-tr');
+            if (rows.length >= 2) {
+              // Silent updates - only log every 4th iteration to reduce console noise
+              if (pollCount % 4 === 0 || pollCount === 1) {
+                console.log(`[Qualified Lead Metrics] Poll ${pollCount}/${MAX_POLLS}: Applying metrics...`);
+              }
+              updateRow(rows[0], metrics.pathA, 'A');
+              updateRow(rows[1], metrics.pathB, 'B');
+            }
+          }
         }
       }
 
-      // Stop polling after MAX_POLLS attempts
+      // Stop polling after 10 seconds
       if (pollCount >= MAX_POLLS) {
         clearInterval(pollingInterval);
         pollingInterval = null;
-        console.log('[Qualified Lead Metrics] Polling complete');
+        console.log('[Qualified Lead Metrics] ✅ Polling complete - metrics should now be stable');
       }
-    }, 1000); // Poll every 1 second
+    }, 500); // Poll every 500ms (very aggressive!)
   }
 
   /**
