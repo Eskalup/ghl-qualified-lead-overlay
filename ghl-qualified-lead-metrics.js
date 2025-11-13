@@ -291,15 +291,66 @@
   // ============================================================================
 
   /**
+   * Wait for GoHighLevel to finish loading table data
+   */
+  async function waitForTableLoad(maxAttempts = 20, delayMs = 500) {
+    for (let i = 0; i < maxAttempts; i++) {
+      // Check for loading indicators
+      const loadingSpinner = document.querySelector('#funnel-stats-details .n-spin');
+      const loadingBar = document.querySelector('#funnel-stats-details .n-progress');
+
+      // Check if table has actual data
+      const detailsSection = document.querySelector('#funnel-stats-details');
+      if (detailsSection) {
+        const tbody = detailsSection.querySelector('.n-data-table-tbody');
+        if (tbody) {
+          const rows = tbody.querySelectorAll('tr.n-data-table-tr');
+          const hasData = rows.length >= 2;
+
+          // Check if rows have actual numbers (not loading or empty)
+          if (hasData) {
+            const firstRow = rows[0];
+            const pageViewCell = firstRow.querySelector('td[data-col-key="pageViewsAll"]');
+            if (pageViewCell) {
+              const text = pageViewCell.textContent.trim();
+              const hasNumbers = /\d+/.test(text);
+
+              if (hasNumbers && !loadingSpinner && !loadingBar) {
+                console.log('[Qualified Lead Metrics] GHL table loaded and ready');
+                return true;
+              }
+            }
+          }
+        }
+      }
+
+      if (i < maxAttempts - 1) {
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+    }
+
+    console.warn('[Qualified Lead Metrics] Timeout waiting for GHL table to load');
+    return false;
+  }
+
+  /**
    * Update the opt-in metrics in the table
    */
-  function updateOptinMetrics(metrics) {
+  async function updateOptinMetrics(metrics) {
     if (!metrics) {
       console.warn('[Qualified Lead Metrics] No metrics to update');
       return;
     }
 
     try {
+      // Wait for GoHighLevel to finish loading the table
+      console.log('[Qualified Lead Metrics] Waiting for GHL table to finish loading...');
+      const loaded = await waitForTableLoad();
+
+      if (!loaded) {
+        console.warn('[Qualified Lead Metrics] Could not confirm table loaded, attempting update anyway');
+      }
+
       // Find the detail table inside the expanded row
       const detailsSection = document.querySelector('#funnel-stats-details');
       if (!detailsSection) {
